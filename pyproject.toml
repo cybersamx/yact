@@ -1,0 +1,38 @@
+[project]
+name = "yact"
+version = "0.1.0"
+description = "Yet another CI tool."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "docker~=7.1",
+    "pydantic~=2.11",
+]
+[dependency-groups]
+dev = [
+    "pytest~=8.4",
+    "pytest-postgresql~=7.0",
+]
+
+[tool.uv]
+package = true
+
+[project.scripts]
+yact = "yact.app:main"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = [
+    "src",
+    "conf",
+]
+include = [
+    "*",
+]
+exclude = [
+    "tests",
+]
+

@@ -1,0 +1,36 @@
+# EditorConfig helps developers define and maintain consistent
+# coding styles between different editors and IDEs
+
+# Top-most editor file
+root = true
+
+### Global ###
+
+# Includes json, yaml, yml, sh.
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+charset = utf-8
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+### Python ###
+[*.py]
+indent_size = 4
+
+### Toml ###
+[*.toml]
+indent_size = 4
+
+### Markdown ###
+[*.md]
+max_line_length = 0 # This is to prevent hard-wrapping in Intellj IDEs
+trim_trailing_whitespace = false
+
+### Others ###
+[Makefile]
+tab_width = 2
+indent_style = tab
