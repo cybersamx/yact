@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from docker import DockerClient, from_env
-from docker.errors import DockerException, ImageNotFound, NotFound
+from docker.errors import DockerException, ImageNotFound
 from docker.models.containers import Container
 
 
@@ -16,16 +16,32 @@ class TaskContainer:
 
     image_name: str
     container_workdir: str
-    client: DockerClient = None
-    container: Container = None
+    host_workdir: str
 
-    def __init__(self, image_name='alpine:latest', container_workdir='/home/yact'):
+    client: DockerClient | None = None
+    container: Container | None = None
+
+    def __init__(self,
+                 image_name='alpine:latest',
+                 container_workdir='/home/yact',
+                 host_workdir=str(Path.cwd()),
+    ):
         try:
             self.image_name = image_name
             self.container_workdir = container_workdir
 
+            host_workdir_path = Path(host_workdir)
+            if not host_workdir_path.is_relative_to(Path.cwd()):
+                # Docker only accepts a host mount path as an absolute path.
+                # Convert a relative path (to the program workdir).
+                host_workdir = Path.cwd() / host_workdir_path
+
+            self.host_workdir = host_workdir
+
             self.client = from_env()
+            print(f'Pulling image {self.image_name}')
             self.client.images.pull(self.image_name)
+            print(f'Pulled image {self.image_name}')
         except DockerException:
             raise TaskContainerException('Looks like docker engine is not found. Please launch docker engine and try again.')
         except Exception as err:
@@ -34,7 +50,6 @@ class TaskContainer:
 
     def __enter__(self):
         try:
-            print('Starting a container.')
             self.container = self.client.containers.run(
                 self.image_name,
                 remove=True,
@@ -42,7 +57,7 @@ class TaskContainer:
                 tty=True,
                 detach=True,
                 volumes={
-                    str(Path.cwd()): {
+                    self.host_workdir: {
                         'bind': self.container_workdir,
                         'mode': 'rw',
                     },
@@ -60,15 +75,20 @@ class TaskContainer:
 
 
     def close(self):
-        # Usually a graceful shutdown offered by container.stop() is preferred, but in docker that
-        # grace period is 10s too long. So we use container.kill() to send a SIGKILL to immediately
-        # shut down the process, which is a bash shell, running in docker.
+        # Usually a graceful shutdown offered by container.stop() is preferred. Since we are running
+        # the docker container as an interactive tty, the underlying shell doesn't terminate immediately
+        # when the signal is received. Consequently, docker enforces a grace period of 10s to shut down
+        # the process - that's too long. So we use container.kill() to send a SIGKILL to immediately
+        # shut down the process.
 
         if self.container:
             self.container.kill()   # No need to run remove if we kill.
 
 
     def exec_cmd(self, cmd) -> str:
+        # Always change the directory to the container workdir.
+        cmd = f'sh -c "cd {self.container_workdir}; {cmd}"'
+
         result = self.container.exec_run(cmd, stream=False, demux=False)
         return result.output.decode('utf-8')
 

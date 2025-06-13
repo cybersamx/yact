@@ -375,3 +375,4 @@ outputs
 
 ### Others ###
 .tmp
+.yact-testdir

@@ -1,7 +1,0 @@
-.dockerignore
-.idea
-.venv
-Dockerfile*
-LICENSE
-README.md
-.cache
