@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from pathlib import Path
 
 from docker import DockerClient, from_env
@@ -12,6 +13,7 @@ class TaskContainerException(Exception):
 class TaskContainer:
     """
     TaskContainer is a container (wrapper) that runs a shell command.
+    Don't call constructor directly, call function run_container with a with block.
     """
 
     image_name: str
@@ -21,22 +23,11 @@ class TaskContainer:
     client: DockerClient | None = None
     container: Container | None = None
 
-    def __init__(self,
-                 image_name='alpine:latest',
-                 container_workdir='/home/yact',
-                 host_workdir=str(Path.cwd()),
-    ):
+    def __init__(self, **kwargs):
         try:
-            self.image_name = image_name
-            self.container_workdir = container_workdir
-
-            host_workdir_path = Path(host_workdir)
-            if not host_workdir_path.is_relative_to(Path.cwd()):
-                # Docker only accepts a host mount path as an absolute path.
-                # Convert a relative path (to the program workdir).
-                host_workdir = Path.cwd() / host_workdir_path
-
-            self.host_workdir = host_workdir
+            self.image_name = kwargs.pop('image_name')
+            self.container_workdir = kwargs.pop('container_workdir')
+            self.host_workdir = kwargs.pop('host_workdir')
 
             self.client = from_env()
             print(f'Pulling image {self.image_name}')
@@ -48,7 +39,7 @@ class TaskContainer:
             raise TaskContainerException(err)
 
 
-    def __enter__(self):
+    def run(self):
         try:
             self.container = self.client.containers.run(
                 self.image_name,
@@ -70,10 +61,6 @@ class TaskContainer:
         return self
 
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-
-
     def close(self):
         # Usually a graceful shutdown offered by container.stop() is preferred. Since we are running
         # the docker container as an interactive tty, the underlying shell doesn't terminate immediately
@@ -82,6 +69,7 @@ class TaskContainer:
         # shut down the process.
 
         if self.container:
+            print(f'Closing container {self.container.name}')
             self.container.kill()   # No need to run remove if we kill.
 
 
@@ -92,3 +80,28 @@ class TaskContainer:
         result = self.container.exec_run(cmd, stream=False, demux=False)
         return result.output.decode('utf-8')
 
+
+@contextmanager
+def run_container(
+    image_name='alpine:latest',
+    container_workdir='/home/yact',
+    host_workdir=str(Path.cwd()),
+):
+    host_workdir_path = Path(host_workdir)
+    if not host_workdir_path.is_relative_to(Path.cwd()):
+        # Docker only accepts a host mount path as an absolute path.
+        # Convert a relative path (to the program workdir).
+        host_workdir = Path.cwd() / host_workdir_path
+
+    kwargs = {
+        'image_name': image_name,
+        'container_workdir': container_workdir,
+        'host_workdir': host_workdir,
+    }
+
+    tc = TaskContainer(**kwargs)
+    tc.run()
+    try:
+        yield tc
+    finally:
+        tc.close()
